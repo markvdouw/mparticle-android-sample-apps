@@ -52,7 +52,7 @@ class CheckoutViewModel(private val cartRepository: CartRepository) : ViewModel(
             with(items.first()) {
                 val event = CommerceEvent.Builder(productAction, createProduct())
                 if (items.size > 1) {
-                    for (i in 1..items.size) {
+                    for (i in 1 until items.size) {
                         event.addProduct(items[i].createProduct())
                     }
                 }
