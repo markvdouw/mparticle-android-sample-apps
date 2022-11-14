@@ -27,7 +27,6 @@ abstract class MpDatabase : RoomDatabase() {
                     "dbMp"
                 ).build()
                 INSTANCE = instance
-                // return instance
                 instance
             }
         }

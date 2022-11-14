@@ -35,6 +35,7 @@ import com.mparticle.example.higgsshopsampleapp.utils.theme.Shapes
 import com.mparticle.example.higgsshopsampleapp.utils.theme.blue_4079FE
 import com.mparticle.example.higgsshopsampleapp.utils.theme.typography
 import com.mparticle.example.higgsshopsampleapp.databinding.FragmentCartBinding
+import com.mparticle.example.higgsshopsampleapp.repositories.CartRepository
 import com.mparticle.example.higgsshopsampleapp.repositories.database.entities.CartItemEntity
 import com.mparticle.example.higgsshopsampleapp.viewmodels.CartViewModel
 
@@ -62,7 +63,9 @@ class CartFragment : Fragment() {
                 }
             }
         cartViewModel =
-            ViewModelProvider(this).get(CartViewModel::class.java)
+            ViewModelProvider(this, CartViewModel.Factory(CartRepository(requireContext()))).get(
+                CartViewModel::class.java
+            )
 
         return binding.root
     }
@@ -70,19 +73,11 @@ class CartFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         MParticle.getInstance()?.logScreen("View My Cart")
-
-        cartViewModel.getTotalCartItems()
-        cartViewModel.cartTotalLiveData.observe(
-            viewLifecycleOwner
-        ) { total ->
-            (activity as MainActivity).updateBottomNavCartButtonText(total)
-        }
-
         cartViewModel.cartResponseLiveData.observe(
             viewLifecycleOwner
         ) { items ->
             Log.d(TAG, "Size: " + items?.size)
-            cartViewModel.getSubtotalPrice(this.requireContext())
+            (activity as MainActivity).updateBottomNavCartButtonText(cartViewModel.getQuantity(items))
         }
     }
 
@@ -97,8 +92,7 @@ class CartFragment : Fragment() {
         val context = LocalContext.current
 
         val items by cartViewModel.cartResponseLiveData.observeAsState()
-        val subtotal by cartViewModel.cartSubtotalPriceLiveData.observeAsState()
-        var clickable=0f
+        var clickable = 0f
 
         val removeItem = { cartItem: CartItemEntity ->
             val entity = CartItemEntity(
@@ -131,7 +125,7 @@ class CartFragment : Fragment() {
                     .padding(bottom = 30.dp)
             )
             if (items.isNullOrEmpty()) {
-                clickable =0.3f
+                clickable = 0.3f
                 Text(
                     stringResource(R.string.cart_0),
                     color = Color.White,
@@ -143,7 +137,7 @@ class CartFragment : Fragment() {
                 )
             }
             if (!items.isNullOrEmpty()) {
-                clickable=1f
+                clickable = 1f
                 LazyColumn {
                     items?.let { it ->
                         itemsIndexed(items = it) { _, item ->
@@ -169,7 +163,7 @@ class CartFragment : Fragment() {
                 )
                 Spacer(Modifier.weight(1f))
                 Text(
-                    "$$subtotal",
+                    "$${cartViewModel.getSubtotalPrice()}",
                     color = Color.White,
                     style = typography.h2,
                     modifier = Modifier
@@ -188,7 +182,8 @@ class CartFragment : Fragment() {
                         val intent = Intent(context, CheckoutActivity::class.java)
                         (context as MainActivity).activityResultLaunch?.launch(intent)
 
-                    } },
+                    }
+                },
 
                 colors = ButtonDefaults.buttonColors(blue_4079FE),
                 shape = Shapes.small,

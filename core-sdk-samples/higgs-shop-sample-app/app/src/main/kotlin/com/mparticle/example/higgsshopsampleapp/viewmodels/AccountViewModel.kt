@@ -8,17 +8,17 @@ import kotlinx.coroutines.launch
 
 class AccountViewModel : ViewModel() {
     val loggedInResponseLiveData = MutableLiveData<Boolean>()
-    private val TAG = "AccountViewModel"
+
+    companion object {
+        const val TAG = "AccountViewModel"
+    }
 
     init {
         MParticle.getInstance()?.Identity()?.currentUser.let {
-            if(it?.isLoggedIn == true) {
-                loggedInResponseLiveData.value = true
-            } else {
-                loggedInResponseLiveData.value = false
-            }
+            loggedInResponseLiveData.value = it?.isLoggedIn == true
         }
     }
+
     fun login() {
         viewModelScope.launch {
             //do some more stuff

@@ -4,7 +4,6 @@ import android.app.ActionBar
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -27,22 +26,26 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.databinding.DataBindingUtil
-import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import com.mparticle.MParticle
-import com.mparticle.commerce.CommerceEvent
 import com.mparticle.example.higgsshopsampleapp.R
-import com.mparticle.example.higgsshopsampleapp.utils.theme.Shapes
-import com.mparticle.example.higgsshopsampleapp.utils.theme.blue_4079FE
-import com.mparticle.example.higgsshopsampleapp.utils.theme.typography
 import com.mparticle.example.higgsshopsampleapp.databinding.ActivityDetailBinding
+import com.mparticle.example.higgsshopsampleapp.repositories.CartRepository
+import com.mparticle.example.higgsshopsampleapp.repositories.ProductsRepository
 import com.mparticle.example.higgsshopsampleapp.repositories.database.entities.CartItemEntity
 import com.mparticle.example.higgsshopsampleapp.utils.Constants
 import com.mparticle.example.higgsshopsampleapp.utils.DEFAULT_PRODUCT_IMAGE
 import com.mparticle.example.higgsshopsampleapp.utils.loadPicture
+import com.mparticle.example.higgsshopsampleapp.utils.theme.Shapes
+import com.mparticle.example.higgsshopsampleapp.utils.theme.blue_4079FE
+import com.mparticle.example.higgsshopsampleapp.utils.theme.typography
 import com.mparticle.example.higgsshopsampleapp.viewmodels.ProductDetailViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ProductDetailActivity : AppCompatActivity() {
     private val TAG = "ProductDetailActivity"
@@ -71,34 +74,12 @@ class ProductDetailActivity : AppCompatActivity() {
 
         val productId = intent.getIntExtra(Constants.PRODUCT_ID, 0)
 
-        productDetailViewModel = ViewModelProvider(this).get(ProductDetailViewModel::class.java)
-
-        productDetailViewModel.cartResponseLiveData.observe(this) { cartAdded ->
-            if (cartAdded) {
-                showAddToCartAlert()
-            }
-        }
-
-        productDetailViewModel.detailResponseLiveData.observe(this, Observer { productItem ->
-            Log.d(TAG, "Show Product ID: " + productItem?.id)
-
-            if (productItem == null) {
-                finish()
-                return@Observer
-            }
-
-            val mProduct = com.mparticle.commerce.Product.Builder(
-                productItem.label,
-                productItem.id.toString(),
-                productItem.price.toDouble()
+        productDetailViewModel = ViewModelProvider(
+            this, ProductDetailViewModel.Factory(
+                CartRepository(this), ProductsRepository(this)
             )
-                .unitPrice(productItem.price.toDouble())
-                .build()
-            val event = CommerceEvent.Builder(com.mparticle.commerce.Product.DETAIL, mProduct)
-                .build()
-            MParticle.getInstance()?.logEvent(event)
+        ).get(ProductDetailViewModel::class.java)
 
-        })
         productDetailViewModel.getProductById(productId)
     }
 
@@ -141,7 +122,7 @@ class ProductDetailActivity : AppCompatActivity() {
         var productColor = listOf<String>()
         val productQuantity = listOf("1", "2", "3", "4", "5", "6", "7", "8")
 
-        product?.let {productItem->
+        product?.let { productItem ->
             if (productItem.variants?.colors?.isNotEmpty() == true) {
                 productColor = productItem.variants.colors
             }
@@ -182,7 +163,10 @@ class ProductDetailActivity : AppCompatActivity() {
             )
 
             val image =
-                loadPicture(imageUrl = product?.imageUrl, defaultImage = DEFAULT_PRODUCT_IMAGE).value
+                loadPicture(
+                    imageUrl = product?.imageUrl,
+                    defaultImage = DEFAULT_PRODUCT_IMAGE
+                ).value
             image?.let { productImage ->
                 Image(
                     bitmap = productImage.asImageBitmap(),
@@ -217,7 +201,7 @@ class ProductDetailActivity : AppCompatActivity() {
                             "${product.id}-${productDetailViewModel.color}-${productDetailViewModel.size}"
                         val entity = CartItemEntity(
                             sku = sku,
-                            id = product.id,
+                            id = product.id.toInt(),
                             label = product.label,
                             imageUrl = product.imageUrl,
                             color = productDetailViewModel.color,
@@ -225,7 +209,14 @@ class ProductDetailActivity : AppCompatActivity() {
                             price = product.price,
                             quantity = productDetailViewModel.quantity
                         )
-                        productDetailViewModel.addToCart(entity)
+                        this@ProductDetailActivity.lifecycleScope.launch {
+                            val result = productDetailViewModel.addToCart(entity)
+                            withContext(Dispatchers.Main) {
+                                if (result) {
+                                    showAddToCartAlert()
+                                }
+                            }
+                        }
                     }
                 },
                 colors = ButtonDefaults.buttonColors(blue_4079FE),

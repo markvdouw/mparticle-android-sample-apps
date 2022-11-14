@@ -1,41 +1,33 @@
 package com.mparticle.example.higgsshopsampleapp.repositories
 
 import android.content.Context
-import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.mparticle.example.higgsshopsampleapp.repositories.network.models.Product
 import com.mparticle.example.higgsshopsampleapp.repositories.network.models.Products
-import java.io.IOException
+import com.mparticle.example.higgsshopsampleapp.utils.getJsonDataFromAsset
 
-class ProductsRepository()  {
-    val TAG = "ProductsRepository"
+class ProductsRepository(private val context: Context) {
 
-    fun getProductById(context: Context, id: Int) : Product? {
-        val products = getProducts(context)
-        products.forEach {
-            if (it.id == id)
-                return it
+    companion object {
+        const val TAG = "ProductsRepository"
+        private const val PRODUCTS_JSON = "products.json"
+    }
+
+    var products: List<Product> = mutableListOf()
+        private set
+
+    init {
+        context.getJsonDataFromAsset(PRODUCTS_JSON)?.let {
+            try {
+                products = Gson().fromJson(it, Products::class.java).products
+            } catch (e: Exception) {
+                e.toString()
+            }
         }
-        return null
     }
 
-    fun getProducts(context: Context) : List<Product> {
-        val jsonFileString = getJsonDataFromAsset(context, "products.json")
-        Log.i(TAG, jsonFileString ?: "Could not find local products.json")
-        val listProductType = object : TypeToken<Products>() {}.type
-        var products: Products = Gson().fromJson(jsonFileString, listProductType)
-        return products.products
-    }
+    fun getProductById(id: Int): Product? = products.firstOrNull { it.id == id.toString() }
 
-    fun getJsonDataFromAsset(context: Context, fileName: String): String? {
-        val jsonString: String
-        try {
-            jsonString = context.assets.open(fileName).bufferedReader().use { it.readText() }
-        } catch (ioException: IOException) {
-            ioException.printStackTrace()
-            return null
-        }
-        return jsonString
-    }
+
 }

@@ -2,7 +2,6 @@ package com.mparticle.example.higgsshopsampleapp.fragments
 
 import android.content.Intent
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -28,37 +27,36 @@ import com.mparticle.MParticle
 import com.mparticle.example.higgsshopsampleapp.R
 import com.mparticle.example.higgsshopsampleapp.activities.MainActivity
 import com.mparticle.example.higgsshopsampleapp.activities.ProductDetailActivity
-import com.mparticle.example.higgsshopsampleapp.fragments.adapters.ShopItemCard
-import com.mparticle.example.higgsshopsampleapp.utils.theme.typography
 import com.mparticle.example.higgsshopsampleapp.databinding.FragmentShopBinding
+import com.mparticle.example.higgsshopsampleapp.fragments.adapters.ShopItemCard
+import com.mparticle.example.higgsshopsampleapp.repositories.CartRepository
+import com.mparticle.example.higgsshopsampleapp.repositories.ProductsRepository
 import com.mparticle.example.higgsshopsampleapp.repositories.network.models.Product
 import com.mparticle.example.higgsshopsampleapp.utils.Constants
+import com.mparticle.example.higgsshopsampleapp.utils.theme.typography
 import com.mparticle.example.higgsshopsampleapp.viewmodels.ShopViewModel
 
 
 class ShopFragment : Fragment() {
     private lateinit var binding: FragmentShopBinding
     private lateinit var shopViewModel: ShopViewModel
-    private val TAG = "ShopFragment"
 
     override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
     ): View {
         (activity as MainActivity).setActionBarTitle("")
         binding = DataBindingUtil.inflate<FragmentShopBinding>(
-            inflater,
-            R.layout.fragment_shop,
-            container,
-            false
-        )
-            .apply {
+            inflater, R.layout.fragment_shop, container, false
+        ).apply {
                 composeView.setContent {
                     ShopFragmentComposable()
                 }
             }
-        shopViewModel = ViewModelProvider(this).get(ShopViewModel::class.java)
+        shopViewModel = ViewModelProvider(
+            this, ShopViewModel.Factory(
+                CartRepository(requireContext()), ProductsRepository(requireContext())
+            )
+        ).get(ShopViewModel::class.java)
 
         return binding.root
     }
@@ -67,12 +65,7 @@ class ShopFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         MParticle.getInstance()?.logScreen("Shop")
 
-        shopViewModel.getProducts(this.requireContext())
-        shopViewModel.getTotalCartItems(this.requireContext())
-
         shopViewModel.cartTotalSizeResponseLiveData.observe(viewLifecycleOwner, Observer { total ->
-            Log.d(TAG, "Total: $total")
-
             if (total == null || total == 0) {
                 (activity as MainActivity).updateBottomNavCartButtonText(0)
                 return@Observer
@@ -80,13 +73,9 @@ class ShopFragment : Fragment() {
             (activity as MainActivity).updateBottomNavCartButtonText(total)
         })
 
-        shopViewModel.inventoryResponseLiveData.observe(
-            viewLifecycleOwner
-        ) { products ->
-            Log.d(TAG, "Size: " + products?.size)
-        }
-    }
+        shopViewModel.loadItems()
 
+    }
 
     @Composable
     fun ShopFragmentComposable() {
@@ -96,8 +85,7 @@ class ShopFragment : Fragment() {
         val navigate = { product: Product ->
             val intent = Intent(context, ProductDetailActivity::class.java)
             intent.putExtra(
-                Constants.PRODUCT_ID,
-                product.id.toString().toIntOrNull() ?: 0
+                Constants.PRODUCT_ID, product.id.toString().toIntOrNull() ?: 0
             )
             (context as MainActivity).activityResultLaunch?.launch(intent)
         }

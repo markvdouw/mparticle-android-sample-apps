@@ -6,40 +6,25 @@ import com.mparticle.example.higgsshopsampleapp.repositories.database.entities.C
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class CartRepository() {
-    val TAG = "CartRepository"
+class CartRepository(context: Context) {
 
-    suspend fun getCartItems(context: Context) : List<CartItemEntity> {
-        var cartItems: List<CartItemEntity>
-        withContext(Dispatchers.IO) {
-            val db = MpDatabase.getDatabase(context)
-            val cartDao = db.mpDao()
-            cartItems = cartDao.getAllCartItems()
-        }
-        return cartItems
+    private val dao = MpDatabase.getDatabase(context).mpDao()
+
+    companion object {
+        private const val TAG = "CartRepository"
     }
 
-    suspend fun addToCart(context: Context, entity: CartItemEntity) = withContext(Dispatchers.IO) {
-        val db = MpDatabase.getDatabase(context)
-        val mpDao = db.mpDao()
-        val sku = "${entity.id}-${entity.color}-${entity.size}"
-        val entityExists = mpDao.getCartItemByKey(sku)
-        entityExists?.let { entity.quantity += entityExists.quantity }
-        val rowsAffected = mpDao.addToCart(entity)
-        rowsAffected
+    suspend fun getCartItems(): List<CartItemEntity> =
+        withContext(Dispatchers.IO) { dao.getAllCartItems() }
+
+    suspend fun addToCart(entity: CartItemEntity) = withContext(Dispatchers.IO) {
+        val item = dao.getCartItemByKey("${entity.id}-${entity.color}-${entity.size}")
+        item?.let { entity.quantity += it.quantity }
+        dao.addToCart(entity)
     }
 
-    suspend fun removeFromCart(context: Context, entity: CartItemEntity) = withContext(Dispatchers.IO) {
-        val db = MpDatabase.getDatabase(context)
-        val mpDao = db.mpDao()
-        val rowsAffected = mpDao.removeFromCart(entity)
-        rowsAffected
-    }
+    suspend fun removeFromCart(entity: CartItemEntity) =
+        withContext(Dispatchers.IO) { dao.removeFromCart(entity) }
 
-    suspend fun clearCart(context: Context) = withContext(Dispatchers.IO) {
-        val db = MpDatabase.getDatabase(context)
-        val mpDao = db.mpDao()
-        val rowsAffected = mpDao.clearCart()
-        rowsAffected
-    }
+    suspend fun clearCart() = withContext(Dispatchers.IO) { dao.clearCart() }
 }

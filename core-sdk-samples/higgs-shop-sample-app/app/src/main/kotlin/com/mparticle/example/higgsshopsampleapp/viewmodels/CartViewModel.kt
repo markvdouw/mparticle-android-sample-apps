@@ -1,76 +1,64 @@
 package com.mparticle.example.higgsshopsampleapp.viewmodels
 
-import android.app.Application
-import android.content.Context
-import android.util.Log
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.*
 import com.mparticle.MParticle
 import com.mparticle.commerce.CommerceEvent
 import com.mparticle.commerce.Product
 import com.mparticle.example.higgsshopsampleapp.repositories.CartRepository
 import com.mparticle.example.higgsshopsampleapp.repositories.database.entities.CartItemEntity
+import com.mparticle.example.higgsshopsampleapp.utils.logFailure
+import com.mparticle.example.higgsshopsampleapp.utils.logSuccess
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
 
+class CartViewModel(private val cartRepository: CartRepository) : ViewModel() {
 
-class CartViewModel (application: Application) : AndroidViewModel(application) {
     val cartResponseLiveData = MutableLiveData<List<CartItemEntity>>()
-    val cartSubtotalPriceLiveData = MutableLiveData<BigDecimal>()
-    val cartTotalLiveData = MutableLiveData<Int>()
-    private val cartRepository = CartRepository()
-    private val TAG = "CartViewModel"
+
+    companion object {
+        const val TAG = "CartViewModel"
+    }
 
     fun getCartItems() {
         viewModelScope.launch {
-            cartResponseLiveData.value = cartRepository.getCartItems(getApplication())
+            cartResponseLiveData.value = cartRepository.getCartItems()
         }
     }
 
-    fun getTotalCartItems() {
-        viewModelScope.launch {
-            val items = cartRepository.getCartItems(getApplication())
-            var total = 0
-            items.forEach {
-                total += it.quantity
-            }
-            cartTotalLiveData.value = total
-        }
-    }
+    fun getQuantity(items: List<CartItemEntity>): Int = items.sumOf { it.quantity }
 
-    fun getSubtotalPrice(context: Context) {
-        viewModelScope.launch {
-            val items = cartRepository.getCartItems(context)
-            var amount = BigDecimal("0.0")
-            items.forEach {
-                amount += BigDecimal(it.quantity.toString()) * BigDecimal(it.price)
-            }
-            cartSubtotalPriceLiveData.value = amount.setScale(2, RoundingMode.HALF_UP)
-        }
-    }
+    fun getSubtotalPrice(): BigDecimal =
+        cartResponseLiveData.value?.sumOf { BigDecimal(it.quantity.toString()) * BigDecimal(it.price) }
+            ?.setScale(2, RoundingMode.HALF_UP) ?: BigDecimal(0.0)
 
     fun removeFromCart(entity: CartItemEntity) {
         viewModelScope.launch {
-            val rowsAffected = cartRepository.removeFromCart(getApplication(), entity)
+            val rowsAffected = cartRepository.removeFromCart(entity)
             if (rowsAffected > 0) {
-                val product = Product.Builder(entity.label, entity.id.toString(), entity.price.toDouble())
-                    .customAttributes(mapOf(
-                        "size" to entity.size,
-                        "color" to entity.color
-                    ))
-                    .quantity(entity.quantity.toDouble())
-                    .build()
-                val event = CommerceEvent.Builder(Product.REMOVE_FROM_CART, product)
-                    .build()
+                val event =
+                    CommerceEvent.Builder(Product.REMOVE_FROM_CART, entity.toProduct()).build()
                 MParticle.getInstance()?.logEvent(event)
-                Log.d(TAG, "Publish Success")
-                cartResponseLiveData.value = cartRepository.getCartItems(getApplication())
+                TAG.logSuccess()
             } else {
-                Log.d(TAG, "Publish Fail")
-                cartResponseLiveData.value = cartRepository.getCartItems(getApplication())
+                TAG.logFailure()
             }
+            getCartItems()
         }
     }
+
+    private fun CartItemEntity.toProduct(): Product =
+        Product.Builder(label, id.toString(), price.toDouble()).customAttributes(
+            mapOf(
+                "size" to size, "color" to color
+            )
+        ).quantity(quantity.toDouble()).build()
+
+    class Factory(private val repository: CartRepository) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return CartViewModel(repository) as T
+        }
+    }
+
 }

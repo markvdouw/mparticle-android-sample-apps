@@ -53,10 +53,8 @@ class LandingActivity : AppCompatActivity() {
             val event = MPEvent.Builder("Landing Button Click", MParticle.EventType.Other)
                 .build()
             MParticle.getInstance()?.logEvent(event)
-            val intent = Intent(this, MainActivity::class.java)
-            startActivity(intent)
+            startActivity(MainActivity.createInstance(this))
             true
-
         } else {
             showBlankAPIKeyAlert()
             false

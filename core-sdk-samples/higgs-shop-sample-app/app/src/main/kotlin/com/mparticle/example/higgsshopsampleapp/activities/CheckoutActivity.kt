@@ -4,7 +4,6 @@ import android.app.ActionBar
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.util.Log
 import android.view.View
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -27,25 +26,23 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.databinding.DataBindingUtil
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.snackbar.BaseTransientBottomBar
 import com.google.android.material.snackbar.Snackbar
 import com.mparticle.MParticle
-import com.mparticle.commerce.CommerceEvent
-import com.mparticle.commerce.Product
-import com.mparticle.commerce.TransactionAttributes
 import com.mparticle.example.higgsshopsampleapp.R
-import com.mparticle.example.higgsshopsampleapp.fragments.adapters.CartItemCard
-import com.mparticle.example.higgsshopsampleapp.utils.theme.*
 import com.mparticle.example.higgsshopsampleapp.databinding.ActivityCheckoutBinding
-import com.mparticle.example.higgsshopsampleapp.repositories.database.entities.CartItemEntity
+import com.mparticle.example.higgsshopsampleapp.fragments.adapters.CartItemCard
+import com.mparticle.example.higgsshopsampleapp.repositories.CartRepository
 import com.mparticle.example.higgsshopsampleapp.utils.Constants
+import com.mparticle.example.higgsshopsampleapp.utils.theme.*
 import com.mparticle.example.higgsshopsampleapp.viewmodels.CheckoutViewModel
-import java.math.BigDecimal
-import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 class CheckoutActivity : AppCompatActivity() {
-    private val TAG = "CheckoutActivity"
     lateinit var binding: ActivityCheckoutBinding
     private lateinit var checkoutViewModel: CheckoutViewModel
 
@@ -69,28 +66,10 @@ class CheckoutActivity : AppCompatActivity() {
         supportActionBar?.setTitle(R.string.checkout_back)
         supportActionBar?.setBackgroundDrawable(ColorDrawable(getColor(R.color.blue_4079FE)))
 
-        checkoutViewModel =
-            ViewModelProvider(this@CheckoutActivity).get(CheckoutViewModel::class.java)
-
-        checkoutViewModel.checkoutPriceLiveData.observe(
-            this@CheckoutActivity
-        ) { priceMap ->
-            val event = commerceEventConversion(priceMap, Product.CHECKOUT)
-            MParticle.getInstance()?.logEvent(event)
-        }
-
-        checkoutViewModel.cartResponseLiveData.observe(
-            this@CheckoutActivity
-        ) { items ->
-            Log.d(TAG, "Size: " + items?.size)
-            checkoutViewModel.getCheckoutPrices()
-        }
-
-        checkoutViewModel.checkOutLiveData.observe(this) { checkedOut ->
-            if (checkedOut) {
-                showPurchaseAlert()
-            }
-        }
+        checkoutViewModel = ViewModelProvider(
+            this@CheckoutActivity,
+            CheckoutViewModel.Factory(CartRepository(this@CheckoutActivity))
+        ).get(CheckoutViewModel::class.java)
 
         checkoutViewModel.getCartItems()
     }
@@ -100,7 +79,7 @@ class CheckoutActivity : AppCompatActivity() {
         return super.onSupportNavigateUp()
     }
 
-    fun showPurchaseAlert() {
+    private fun showPurchaseAlert() {
         val snackbar = Snackbar.make(
             binding.root,
             getString(R.string.checkout_thanks),
@@ -126,53 +105,9 @@ class CheckoutActivity : AppCompatActivity() {
         snackbar.show()
     }
 
-    private fun commerceEventConversion(
-        priceMap: Map<String, Any>,
-        productAction: String
-    ): CommerceEvent {
-        val cartItems = priceMap["cartItems"] as List<CartItemEntity>
-        var entity = cartItems[0]
-        val product =
-            Product.Builder(entity.label, entity.id.toString(), entity.price.toDouble())
-                .customAttributes(
-                    mapOf(
-                        "size" to entity.size,
-                        "color" to entity.color
-                    )
-                )
-                .quantity(entity.quantity.toDouble())
-                .build()
-        val event = CommerceEvent.Builder(productAction, product)
-        for (i in 1 until cartItems.size) {
-            entity = cartItems[i]
-            val product2 =
-                Product.Builder(entity.label, entity.id.toString(), entity.price.toDouble())
-                    .customAttributes(
-                        mapOf(
-                            "size" to entity.size,
-                            "color" to entity.color
-                        )
-                    )
-                    .quantity(entity.quantity.toDouble())
-                    .build()
-            event.addProduct(product2)
-        }
-
-        if (productAction == Product.PURCHASE) {
-            val attributes: TransactionAttributes =
-                TransactionAttributes(Calendar.getInstance().time.toString())
-                    .setRevenue(priceMap["grandTotal"].toString().toDouble())
-                    .setTax(priceMap["salesTax"].toString().toDouble())
-                    .setShipping(BigDecimal(Constants.CHECKOUT_SHIPPING_COST).toDouble())
-            event.transactionAttributes(attributes)
-        }
-
-        return event.build()
-    }
-
     @Composable
     fun CheckoutActivityComposable() {
-        val priceMap by checkoutViewModel.checkoutPriceLiveData.observeAsState()
+        val checkoutTotals by checkoutViewModel.checkoutTotals.observeAsState()
         val items by checkoutViewModel.cartResponseLiveData.observeAsState()
 
         LazyColumn(
@@ -399,7 +334,7 @@ class CheckoutActivity : AppCompatActivity() {
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "$${priceMap?.get("subTotal")}",
+                        "$${checkoutTotals?.get("subTotal")}",
                         style = typography.h2,
                         modifier = Modifier
                             .wrapContentWidth()
@@ -426,7 +361,7 @@ class CheckoutActivity : AppCompatActivity() {
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "$${priceMap?.get("salesTax")}",
+                        "$${checkoutTotals?.get("salesTax")}",
                         style = typography.h2,
                         modifier = Modifier
                             .wrapContentWidth()
@@ -453,7 +388,7 @@ class CheckoutActivity : AppCompatActivity() {
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "$${priceMap?.get("shipping")}",
+                        "$${checkoutTotals?.get("shipping")}",
                         style = typography.h2,
                         modifier = Modifier
                             .wrapContentWidth()
@@ -484,7 +419,7 @@ class CheckoutActivity : AppCompatActivity() {
                     )
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "$${priceMap?.get("grandTotal")}",
+                        "$${checkoutTotals?.get("grandTotal")}",
                         style = typography.h2,
                         modifier = Modifier
                             .wrapContentWidth()
@@ -502,7 +437,14 @@ class CheckoutActivity : AppCompatActivity() {
 
                 Button(
                     onClick = {
-                        checkoutViewModel.clearCart()
+                        this@CheckoutActivity.lifecycleScope.launch {
+                            val result = checkoutViewModel.clearCart()
+                            withContext(Dispatchers.Main) {
+                                if (result) {
+                                    showPurchaseAlert()
+                                }
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(blue_4079FE),
                     shape = Shapes.small,

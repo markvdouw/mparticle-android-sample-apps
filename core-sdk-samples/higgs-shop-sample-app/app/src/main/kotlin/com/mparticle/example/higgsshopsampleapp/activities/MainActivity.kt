@@ -1,5 +1,6 @@
 package com.mparticle.example.higgsshopsampleapp.activities
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.view.MenuItem
@@ -22,6 +23,10 @@ class MainActivity : AppCompatActivity() {
 
     lateinit var binding: ActivityMainBinding
     var activityResultLaunch: ActivityResultLauncher<Intent>? = null
+
+    companion object {
+        fun createInstance(context: Context): Intent = Intent(context, MainActivity::class.java)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,7 +92,7 @@ class MainActivity : AppCompatActivity() {
     fun updateBottomNavCartButtonText(size: Int) {
         val bottomNavigation: BottomNavigationView = findViewById(R.id.bottom_nav)
         val item: MenuItem = bottomNavigation.menu.findItem(R.id.navigation_cart)
-        when(size) {
+        when (size) {
             0 -> item.title = getString(R.string.nav_cart)
             else -> item.title = getString(R.string.nav_cart) + " (${size})"
         }
